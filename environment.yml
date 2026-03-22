@@ -1,0 +1,60 @@
+# WSI-RL: Reinforcement Learning on Whole Slide Images (Camelyon16)
+# Usage:
+#   conda env create -f environment.yml
+#   conda activate wsi-rl
+
+name: wsi-rl
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+
+  # ---------- System-level dependency ----------
+  - openslide=4.0.0            # C library required by openslide-python
+
+  # ---------- PyTorch (CUDA 12.1) ----------
+  # Adjust cuda version to match your driver: cuda-toolkit 11.8 or 12.1
+  # For CPU-only: replace pytorch-cuda line with `- cpuonly`
+  - pytorch>=2.2
+  - torchvision>=0.17
+  - pytorch-cuda=12.1
+
+  # ---------- pip-installed packages ----------
+  - pip:
+      # -- Pathology I/O --
+      - openslide-python==1.4.1    # Python bindings
+      - h5py>=3.10                 # HDF5 storage
+
+      # -- Reinforcement Learning --
+      - stable-baselines3>=2.3     # PPO, A2C, DQN, etc.
+      - sb3-contrib>=2.3           # RecurrentPPO (LSTM-PPO)
+      - gymnasium>=0.29            # RL environment API
+
+      # -- Deep Learning / CV --
+      - timm>=1.0                  # pretrained ResNet, ViT, UNI, CTransPath, etc.
+
+      # -- Scientific Computing --
+      - numpy>=1.26
+      - scipy>=1.12
+      - scikit-learn>=1.4
+      - pandas>=2.1
+
+      # -- Image Processing --
+      - opencv-python-headless>=4.9  # headless avoids GUI deps on servers
+      - Pillow>=10.2
+
+      # -- Visualization & Notebook --
+      - matplotlib>=3.8
+      - seaborn>=0.13
+      - jupyterlab>=4.0
+      - ipywidgets>=8.1
+      - tqdm>=4.66
+
+      # -- Logging --
+      - tensorboard>=2.16          # SB3 default logging backend
+      - wandb>=0.16                # optional: experiment tracking
