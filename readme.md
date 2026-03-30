@@ -43,93 +43,49 @@ The environment loads all data from a single HDF5 file per WSI, enabling fast re
 
 [`(1)tile_visualization.ipynb`](<(1)tile_visualization.ipynb>)
 
-Visualizes the WSI tiling process. Opens a `.tif` slide with OpenSlide, overlays the tile grid at 20× magnification, and inspects individual tiles. Provides an intuitive understanding of how a WSI is decomposed into the grid that forms the RL environment.
+Visualizes the WSI tiling process — opens a `.tif` slide with OpenSlide, overlays the tile grid at 20× magnification, and inspects individual tiles.
 
 ### (2) WSI Preprocessing
 
 [`(2)wsi_preprocessing.ipynb`](<(2)wsi_preprocessing.ipynb>)
 
-The core data pipeline notebook. For each WSI in the Camelyon16 training set:
-
-1. **Tiling** — Extracts 224×224 tiles at 20× and corresponding context patches at 10×
-2. **Tissue Masking** — Generates a binary tissue mask resized to tile-grid resolution
-3. **Tumor Masking** — Parses annotation XML files to create per-tile tumor labels (area threshold 0.3)
-4. **Embedding** — Computes 512-d feature vectors using both Self-Supervised and ImageNet-pretrained ResNet18
-5. **HDF5 Storage** — Writes all embeddings, coordinates, masks, and metadata into one `.h5` file per slide
-
-Produces the `tile_database/tumor_*.h5` files consumed by `WSIEnv`.
+Core data pipeline. Extracts 224×224 tiles at 20×/10×, generates tissue & tumor masks, computes ResNet18 embeddings (Self-Supervised + ImageNet), and writes everything into one `.h5` file per slide. Produces the `tile_database/tumor_*.h5` files consumed by `WSIEnv`.
 
 ### (3) Annotation & Tile Visualization
 
 [`(3)annotation_tile_visualization.ipynb`](<(3)annotation_tile_visualization.ipynb>)
 
-Overlays tumor annotations on the tile grid. For a given WSI:
-
-- Displays the full slide with tumor region outlines
-- Zooms into each tumor region, showing tile-level tumor/normal labels on the grid
-- Extracts tile embeddings and produces UMAP dimensionality reduction plots, visualizing the feature-space separation between tumor and normal tiles
-
-Useful for verifying annotation quality and assessing whether the embedding space carries discriminative signal.
+Overlays tumor annotations on the tile grid, zooms into tumor regions with tile-level labels, and produces UMAP plots of tile embeddings. Useful for verifying annotation quality and embedding discriminability.
 
 ### (4) HDF5 Database Test
 
 [`(4)h5_database_test.ipynb`](<(4)h5_database_test.ipynb>)
 
-Sanity-checks the HDF5 databases produced by notebook (2). Inspects dataset shapes, attribute values, embedding statistics, and mask distributions. Confirms data integrity before proceeding to RL training.
+Sanity-checks the HDF5 databases produced by notebook (2) — inspects dataset shapes, attribute values, embedding statistics, and mask distributions.
 
 ### (5) RL Setup & Single WSI
 
 [`(5)RL_setup_and_Single_WSI.ipynb`](<(5)RL_setup_and_Single_WSI.ipynb>)
 
-The first RL experiment. Trains a PPO agent on a **single WSI with fixed starting positions** near the tumor boundary (3–5 BFS steps away). Validates that:
-
-- The Gymnasium environment is correctly wired (passes `check_env`)
-- The RL pipeline converges — reward increases and episode length decreases over training
-- The agent learns short-range navigation to tumor regions
-
-This serves as the baseline proof that the environment and training loop function correctly, before scaling to harder settings.
+First RL experiment. Trains a PPO agent on a single WSI with fixed starting positions near the tumor boundary (3–5 BFS steps). Serves as the baseline proof that the environment and training loop work correctly.
 
 ### (6) Single WSI Curriculum
 
-[Currently Not Provided]
+[`(6)Single_WSI_Curriculum.ipynb`](<(6)Single_WSI_Curriculum.ipynb>)
 
-Scales up from fixed starts to random starting positions on the same WSI, testing whether the agent can navigate to tumor from increasing distances. Two training strategies are compared:
-
-- **Sequential Curriculum** (Sections 1–7): Trains in stages — 2a (3–5 BFS steps) → 2b (10–20) → 2c (all tissue) — with automatic promotion at 70% success rate. Result: *catastrophic forgetting* — later stages destroy earlier learned policies, final model drops to 32%/8%/2% across the three distance pools.
-- **Mixed-Distance Training** (Section 8): Samples starting positions uniformly from all tissue tiles in a single training phase, with a wider network (256-256). Numerically better (48%/20%/6%), but trajectory analysis reveals the agent simply learned a fixed "go down" strategy — all successful episodes are straight vertical lines.
-
-Core finding: The observation space (tile embeddings + coordinates + visited map) encodes *what tissue looks like*, not *where tumor is relative to the agent*. On Camelyon16, normal tissue embeddings are nearly indistinguishable regardless of proximity to tumor, leaving the agent no directional signal to learn from. This is an information-theoretic bottleneck, not a training strategy issue.
+Compares **sequential curriculum** (staged distance increase, suffers catastrophic forgetting) and **mixed-distance training** (uniform sampling from all tissue) on a single WSI. Core finding: the observation space lacks directional signal toward tumor — normal tile embeddings are nearly indistinguishable regardless of proximity, creating an information-theoretic bottleneck.
 
 ### (6_1) Single WSI Curriculum — Control Experiment
 
-[Currently Not Provided]
+[`(6_1)Single_WSI_Curriculum1.ipynb`](<(6_1)Single_WSI_Curriculum1.ipynb>)
 
-A **controlled-variable follow-up** to notebook (6), designed to rule out alternative explanations for the failure:
-
-| Potential Confound in (6) | How (6_1) Addresses It |
-|--------------------------|----------------------|
-| Distance gap too large (3-5 → 10-20, skipping 5-10) | Smooth progression: 3-5 → 5-10 → 10-20 |
-| Training budget too small (200K–500K per stage) | 1,000,000 steps per stage (3M total) |
-| Multiple variables changed at once in (6) Section 8 | All hyperparams/architecture unchanged — only distance granularity and budget differ |
-
-Additionally introduces systematic cross-stage forgetting detection (each model evaluated on all prior distance pools) and batch trajectory export (30 PNGs per stage for per-episode inspection).
-
-Result: The agent still learns only a fixed-direction policy at each stage (e.g., "always go up" in 2a, "always go left" in 2b). Cross-stage success rates cluster around 35–58% with no qualitative improvement. This definitively closes the "inadequate training" alternative hypothesis and confirms the observation space information bottleneck identified in (6).
+Controlled follow-up to notebook (6): uses finer distance progression (3-5 → 5-10 → 10-20) and 3× more training budget to rule out inadequate training as an explanation. Results confirm the observation space bottleneck — the agent still learns only fixed-direction policies.
 
 ### (7) RecurrentPPO
 
-[Currently Not Provided]
+[`(7)RecurrentPPO_Curriculum.ipynb`](<(7)RecurrentPPO_Curriculum.ipynb>)
 
-Tests whether **sequential memory** (LSTM) can extract directional signal from observation history. Uses RecurrentPPO ([SB3-Contrib](https://sb3-contrib.readthedocs.io/)) with the same mixed-distance training as (6) Section 8.
-
-| Model | Architecture | Params | 2a (3-5) | 2b (10-20) | 2c (all tissue) |
-|-------|-------------|--------|----------|------------|-----------------|
-| MLP-PPO (NB6) | [256,256] MLP | ~1M | 48% | 20% | 6% |
-| RecurrentPPO | [256,256] + LSTM(256) | 4.2M | 54% | 28% | 20% |
-
-RecurrentPPO improves success rates across all distance ranges (most notably +233% relative on 2c). However, trajectory visualization reveals the same pattern: successful episodes are still straight lines going downward. The LSTM enables the agent to maintain its chosen direction more consistently (fewer mid-trajectory oscillations), but does not enable actual directional navigation.
-
-Conclusion: The failure is not due to lack of temporal memory — even with full observation history, there is no directional gradient in the embedding space for the LSTM to exploit on this dataset. The bottleneck lies in the observation content, not the policy architecture.
+Tests whether LSTM memory (RecurrentPPO) can extract directional signal from observation history. Improves success rates over MLP-PPO (e.g., 6% → 20% on all-tissue starts), but trajectory analysis shows the same straight-line strategy. Confirms the bottleneck lies in observation content, not policy architecture.
 
 ---
 
