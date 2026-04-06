@@ -72,7 +72,7 @@ class WSIEnv(gymnasium.Env):
         self.start_dist_range = start_dist_range
         self.render_mode = render_mode
 
-        # -- reward defaults --------------------------------------------------
+        # reward defaults
         default_reward = dict(
             step_penalty=-0.01,
             background_penalty=-0.5,
@@ -84,10 +84,10 @@ class WSIEnv(gymnasium.Env):
         )
         self.reward_cfg = {**default_reward, **(reward_cfg or {})}
 
-        # -- load HDF5 data ---------------------------------------------------
+        # load HDF5 data
         self._load_h5(h5_path)
 
-        # -- spaces ------------------------------------------------------------
+        # spaces
         n_actions = 5 if self.enable_stop else 4
         self.action_space = spaces.Discrete(n_actions)
 
@@ -98,14 +98,14 @@ class WSIEnv(gymnasium.Env):
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
 
-        # -- episode state (set in reset) --------------------------------------
+        # episode state (set in reset)
         self.current_row = 0
         self.current_col = 0
         self.step_count = 0
         self.visited: set[tuple[int, int]] = set()
         self._start_idx = 0  # cycles through fixed_starts
 
-        # -- pre-compute distance map for curriculum starts --------------------
+        # pre-compute distance map for curriculum starts
         self._dist_to_tumor: np.ndarray | None = None
         self._start_pool_cache: dict[tuple[int, int], np.ndarray] = {}
         if self.start_mode in ("curriculum", "distance_band"):
@@ -307,7 +307,7 @@ class WSIEnv(gymnasium.Env):
 
         action = int(action)
 
-        # ---- STOP action (only when enabled) ----
+        # STOP action (only when enabled)
         if self.enable_stop and action == STOP:
             is_tumor = self.tumor_grid[self.current_row, self.current_col]
             reward = (
@@ -325,7 +325,7 @@ class WSIEnv(gymnasium.Env):
             )
             return obs, reward, terminated, truncated, info
 
-        # ---- Movement ----
+        # Movement
         dr, dc = {UP: (-1, 0), DOWN: (1, 0), LEFT: (0, -1), RIGHT: (0, 1)}[action]
         new_r = self.current_row + dr
         new_c = self.current_col + dc
@@ -343,7 +343,7 @@ class WSIEnv(gymnasium.Env):
             # Invalid move: stay in place (wall bump)
             moved = False
 
-        # ---- Reward components ----
+        # Reward components
         pos = (self.current_row, self.current_col)
 
         # Background penalty (non-tissue target — shouldn't happen with wall-bump, but guard)
@@ -356,12 +356,12 @@ class WSIEnv(gymnasium.Env):
 
         self.visited.add(pos)
 
-        # ---- External termination: stepped on tumor ----
+        # External termination: stepped on tumor
         if self.tumor_grid[self.current_row, self.current_col]:
             reward += self.reward_cfg["tumor_reward"]
             terminated = True
 
-        # ---- Timeout ----
+        # Timeout
         if not terminated and self.step_count >= self.max_steps:
             reward += self.reward_cfg["timeout_penalty"]
             truncated = True
